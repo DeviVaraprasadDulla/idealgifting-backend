@@ -1,0 +1,70 @@
+name: Deploy Marvelous Backends
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Debug secrets
+        run: |
+          echo "HOST=${{ secrets.VPS_HOST }}"
+          echo "PORT=${{ secrets.VPS_PORT }}"
+          echo "USER=${{ secrets.VPS_USER }}"
+      - name: Verify secrets exist
+        run: |
+          [ -z "${{ secrets.VPS_HOST }}" ] && echo "❌ VPS_HOST empty" || echo "✅ VPS_HOST present"
+          [ -z "${{ secrets.VPS_USER }}" ] && echo "❌ VPS_USER empty" || echo "✅ VPS_USER present"
+          [ -z "${{ secrets.VPS_PORT }}" ] && echo "❌ VPS_PORT empty" || echo "✅ VPS_PORT present"
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -p ${{ secrets.VPS_PORT }} ${{ secrets.VPS_HOST }} >> ~/.ssh/known_hosts
+      - name: Sanity check secrets (length only)
+        run: |
+          echo "HOST length: ${#VPS_HOST}"
+          echo "USER length: ${#VPS_USER}"
+          echo "PORT length: ${#VPS_PORT}"
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+      - name: Deploy to VPS
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          echo "Connecting to $VPS_USER@$VPS_HOST on port $VPS_PORT"
+
+          ssh -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -p "$VPS_PORT" \
+            "$VPS_USER@$VPS_HOST" "
+              set -e
+              cd /var/www/marvelous/Marvelous
+              echo 'Pulling latest code...'
+              git pull origin main
+              echo 'Activating virtualenv...'
+              source venv/bin/activate
+              echo 'Installing requirements...'
+              pip install -r requirements.txt
+              echo 'Running migrations...'
+              python manage.py migrate
+              echo 'Collecting static files...'
+              python manage.py collectstatic --noinput
+              echo 'Restarting Gunicorn...'
+              systemctl restart marvelous
+              echo 'Reloading Nginx...'
+              systemctl reload nginx
+              echo '✅ Deployment successful'
+            "

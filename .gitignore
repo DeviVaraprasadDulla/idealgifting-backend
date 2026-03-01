@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.sqlite3
+*.log
+
+# Django
+db.sqlite3
+media/
+staticfiles/
+.env
+.env.*
+*.env
+
+# Virtual environment
+venv/
+env/
+.venv/
+ENV/
+
+# IDEs / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations (optional – keep if you want)
+# **/migrations/*.py
+# !**/migrations/__init__.py
+
+# Node (if frontend in same repo)
+node_modules/
+dist/
