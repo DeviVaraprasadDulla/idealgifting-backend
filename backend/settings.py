@@ -88,6 +88,7 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 CORS_ALLOWED_ORIGINS = [
     "https://www.idealgifting.in",
     "https://idealgifting.in",
+    "http://localhost:5173"
 ]
 from corsheaders.defaults import default_headers
 
