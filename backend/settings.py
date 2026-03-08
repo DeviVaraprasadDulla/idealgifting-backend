@@ -22,7 +22,7 @@ DEBUG = os.getenv("DEBUG", "True") == "True"
 # 🔒 Production-ready host handling
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,api.idealgifting.in").split(",")
 
-GOOGLE_CLIENT_ID = "743254433347-9g0g82eosbfoo8dt19p6ufoeegqo82vi.apps.googleusercontent.com"
+GOOGLE_CLIENT_ID = "1050209044117-fggu6tpk907ksp40nonnk76tvo8losst.apps.googleusercontent.com"
 
 # -------------------------------------------------
 # REST FRAMEWORK
