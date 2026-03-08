@@ -20,7 +20,7 @@ SECRET_KEY = os.getenv("SECRET_KEY", "unsafe-secret-key-change-in-production")
 DEBUG = os.getenv("DEBUG", "True") == "True"
 
 # 🔒 Production-ready host handling
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
+ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1,api.idealgifting.in").split(",")
 
 GOOGLE_CLIENT_ID = "743254433347-9g0g82eosbfoo8dt19p6ufoeegqo82vi.apps.googleusercontent.com"
 
@@ -86,8 +86,8 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # -------------------------------------------------
 
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
+    "https://www.idealgifting.in/",
+    "https://www.idealgifting.in/",
 ]
 
 from corsheaders.defaults import default_headers
