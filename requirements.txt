@@ -9,3 +9,4 @@ psycopg2-binary
 Pillow
 stripe
 python-dotenv
+razorpay
