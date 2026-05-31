@@ -8,7 +8,7 @@ from .services.factory import get_payment_service
 from .services.razorpay import RazorpayService
 from backend import settings
 from django.db.models import F
-
+from .models import Payment
 from cart.models import CartItem
 
 from orders.models import (
@@ -49,6 +49,7 @@ class InitiatePaymentAPIView(APIView):
     
 
 class CreateRazorpayOrderAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
 
@@ -59,7 +60,8 @@ class CreateRazorpayOrderAPIView(APIView):
         try:
 
             order = Order.objects.get(
-                public_token=order_token
+                public_token=order_token,
+                user=request.user
             )
 
         except Order.DoesNotExist:
@@ -72,7 +74,18 @@ class CreateRazorpayOrderAPIView(APIView):
         razorpay_order = (
             RazorpayService.create_order(order)
         )
-
+        Payment.objects.filter(
+            order=order,
+            status="PENDING"
+        ).delete()
+        Payment.objects.create(
+            user=order.user,
+            order=order,
+            razorpay_order_id=razorpay_order["id"],
+            payment_method="RAZORPAY",
+            amount=order.total_amount,
+            status="PENDING"
+        )
         return Response(
             {
                 "key":
@@ -88,6 +101,7 @@ class CreateRazorpayOrderAPIView(APIView):
     
 
 class VerifyRazorpayPaymentAPIView(APIView):
+    permission_classes = [IsAuthenticated]
 
     def post(self, request):
 
@@ -100,7 +114,8 @@ class VerifyRazorpayPaymentAPIView(APIView):
             order = Order.objects.select_related(
                 "user"
             ).get(
-                public_token=order_token
+                public_token=order_token,
+                user=request.user
             )
 
         except Order.DoesNotExist:
@@ -130,8 +145,44 @@ class VerifyRazorpayPaymentAPIView(APIView):
                     )
                 }
             )
+            # ADD THIS BLOCK HERE
+            payment = Payment.objects.filter(
+                order=order,
+                status="PENDING"
+            ).last()
+            if not payment:
+                return Response(
+                    {"error": "Payment record not found"},
+                    status=400
+                )
+            if payment and (
+                payment.razorpay_order_id
+                != request.data.get("razorpay_order_id")
+            ):
+                return Response(
+                    {"error": "Invalid payment reference"},
+                    status=400
+                )
+            
+            payment.razorpay_payment_id = request.data.get(
+                    "razorpay_payment_id"
+                )
+            payment.status = "SUCCESS"
+            payment.save()
 
         except Exception:
+
+            payment = Payment.objects.filter(
+                order=order,
+                status="PENDING"
+            ).last()
+
+            if payment:
+                payment.razorpay_payment_id = request.data.get(
+                    "razorpay_payment_id"
+                )
+                payment.status = "FAILED"
+                payment.save()
 
             return Response(
                 {
@@ -161,12 +212,11 @@ class VerifyRazorpayPaymentAPIView(APIView):
         for item in order.items.select_related(
             "product"
         ):
-
-            item.product.stock = (
-                F("stock") - item.quantity
+            item.product.__class__.objects.filter(
+                pk=item.product.pk
+            ).update(
+                stock=F("stock") - item.quantity
             )
-
-            item.product.save()
 
         CartItem.objects.filter(
             cart__user=order.user

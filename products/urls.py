@@ -49,7 +49,11 @@ urlpatterns = [
     path("products/", ProductListAPIView.as_view()),
 
     # 📄 Product Detail LAST
-    path("products/<int:pk>/", ProductDetailAPIView.as_view()),
+    # Product Detail
+        path(
+            "products/<slug:slug>/",
+            ProductDetailAPIView.as_view()
+        ),
 
     # =========================
     # Submit Rating

@@ -238,16 +238,21 @@ class FeaturedProductAPIView(ListAPIView):
 
 class ProductDetailAPIView(RetrieveAPIView):
     permission_classes = [AllowAny]
+
     serializer_class = ProductSerializer
+
+    lookup_field = "slug"
 
     def get_queryset(self):
         return (
             Product.objects
             .filter(is_active=True)
             .select_related("category", "subcategory")
-            .prefetch_related("images", "productfilter_set")
+            .prefetch_related(
+                "images",
+                "productfilter_set"
+            )
         )
-
 
 # =====================================================
 # PRODUCT SEARCH (NAVBAR AUTOCOMPLETE)

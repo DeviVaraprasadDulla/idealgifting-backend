@@ -69,7 +69,22 @@ class CreateOrderAPIView(APIView):
                     status=400
                 )
 
-        total = sum(item.product.price * item.quantity for item in items)
+        total = 0
+
+        for item in items:
+            discounted_price = item.product.price
+
+            if item.product.discount_percentage > 0:
+                discounted_price = (
+                    item.product.price
+                    - (
+                        item.product.price
+                        * item.product.discount_percentage
+                        / 100
+                    )
+                )
+
+            total += discounted_price * item.quantity
 
         order = Order.objects.create(
             user=request.user,
@@ -92,12 +107,24 @@ class CreateOrderAPIView(APIView):
             if first_image:
                 image_url = f"{request_scheme}://{request_host}{first_image.image.url}"
 
+            discounted_price = item.product.price
+
+            if item.product.discount_percentage > 0:
+                discounted_price = (
+                    item.product.price
+                    - (
+                        item.product.price
+                        * item.product.discount_percentage
+                        / 100
+                    )
+                )
+
             OrderItem.objects.create(
                 order=order,
                 product=item.product,
                 product_name=item.product.name,
                 product_image=image_url,
-                price=item.product.price,
+                price=discounted_price,
                 quantity=item.quantity
             )
 

@@ -52,6 +52,17 @@ class Payment(models.Model):
     created_at = models.DateTimeField(
         auto_now_add=True
     )
+    razorpay_order_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
+
+    razorpay_payment_id = models.CharField(
+        max_length=255,
+        blank=True,
+        null=True
+    )
 
     def __str__(self):
         return f"{self.order.id} - {self.status}"

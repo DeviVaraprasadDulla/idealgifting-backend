@@ -9,10 +9,16 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
-    product_price = serializers.DecimalField(
+    product_price = serializers.SerializerMethodField()
+    original_price = serializers.DecimalField(
         source="product.price",
         max_digits=10,
         decimal_places=2,
+        read_only=True
+    )
+
+    discount_percentage = serializers.IntegerField(
+        source="product.discount_percentage",
         read_only=True
     )
 
@@ -34,12 +40,14 @@ class CartItemSerializer(serializers.ModelSerializer):
         model = CartItem
         fields = [
             "id",
-            "product",          # unchanged
+            "product",
             "product_id",
             "product_category",
             "quantity",
             "product_name",
             "product_price",
+            "original_price",
+            "discount_percentage",
             "product_image",
         ]
 
@@ -53,3 +61,14 @@ class CartItemSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(first_image.image.url)
 
         return None
+    def get_product_price(self, obj):
+        price = obj.product.price
+        discount = obj.product.discount_percentage
+
+        if discount > 0:
+            return round(
+                float(price) - (float(price) * discount / 100),
+                2
+            )
+
+        return float(price)

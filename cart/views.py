@@ -186,13 +186,23 @@ class CheckoutAPIView(APIView):
                     status=400
                 )
 
-            subtotal = item.product.price * item.quantity
+            discounted_price = item.product.price
+
+            if item.product.discount_percentage > 0:
+                discounted_price = (
+                    item.product.price
+                    - (item.product.price * item.product.discount_percentage / 100)
+                )
+
+            subtotal = discounted_price * item.quantity
             total += subtotal
 
             data.append({
                 "product_id": item.product.id,
                 "product": item.product.name,
-                "price": item.product.price,
+                "price": discounted_price,
+                "original_price": item.product.price,
+                "discount_percentage": item.product.discount_percentage,
                 "quantity": item.quantity,
                 "subtotal": subtotal
             })
