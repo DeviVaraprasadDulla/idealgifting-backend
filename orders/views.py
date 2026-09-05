@@ -119,13 +119,18 @@ class CreateOrderAPIView(APIView):
                     )
                 )
 
+            personalization = getattr(item, "personalization", None)
+
             OrderItem.objects.create(
                 order=order,
                 product=item.product,
                 product_name=item.product.name,
                 product_image=image_url,
                 price=discounted_price,
-                quantity=item.quantity
+                quantity=item.quantity,
+                personalization_snapshot=(
+                    personalization.to_snapshot(request) if personalization else None
+                ),
             )
 
         return Response({
@@ -220,7 +225,8 @@ class OrderByTokenAPIView(APIView):
                     "name": i.product_name,
                     "image": i.product_image,
                     "price": i.price,
-                    "quantity": i.quantity
+                    "quantity": i.quantity,
+                    "personalization": i.personalization_snapshot,
                 }
                 for i in order.items.all()
             ]
@@ -256,7 +262,8 @@ class MyOrdersAPIView(APIView):
                         "name": i.product_name,
                         "image": i.product_image,
                         "price": i.price,
-                        "quantity": i.quantity
+                        "quantity": i.quantity,
+                        "personalization": i.personalization_snapshot,
                     }
                     for i in o.items.all()
                 ]

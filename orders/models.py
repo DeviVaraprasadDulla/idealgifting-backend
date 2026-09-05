@@ -151,6 +151,13 @@ class OrderItem(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     quantity = models.PositiveIntegerField()
 
+    # Snapshot of any personalization selected for this line at the moment
+    # the order was created, following the same denormalization principle
+    # as product_name/product_image above - stays intact even if the
+    # originating CartItem/Personalization row is later deleted (e.g. the
+    # cart being cleared once payment succeeds).
+    personalization_snapshot = models.JSONField(null=True, blank=True)
+
     def __str__(self):
         return self.product_name
 
