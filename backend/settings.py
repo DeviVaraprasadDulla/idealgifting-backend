@@ -35,6 +35,11 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_THROTTLE_RATES": {
+        # Basic abuse protection for the public contact/corporate enquiry
+        # endpoints - does not affect any other existing endpoint.
+        "enquiries": "5/hour",
+    },
 }
 
 # -------------------------------------------------
@@ -62,6 +67,9 @@ INSTALLED_APPS = [
     "payments",
     "import_export",
     "settings_app",
+    "wishlist",
+    "personalization",
+    "enquiries",
 ]
 
 # -------------------------------------------------
