@@ -11,6 +11,7 @@ from .models import (
     Category,
     SubCategory,
     Product,
+    Filter,
     FilterOption,
     Review,
     CategoryFilter,
@@ -295,6 +296,41 @@ class ProductSearchAPIView(APIView):
             })
 
         return Response(results)
+
+
+# =====================================================
+# TAXONOMY (Occasion / Recipient / Feeling / Price Band)
+# =====================================================
+# Read-only view over the existing generic Filter/FilterOption/
+# ProductFilter system - no new models. Lets the frontend list the real
+# options for a named taxonomy (e.g. "Occasion") with a live product
+# count for each, so Occasion/Recipient pages and the Gift Finder can
+# work against real data without a second, parallel taxonomy system.
+
+class TaxonomyListAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, name):
+        taxonomy_filter = Filter.objects.filter(name__iexact=name).first()
+
+        if not taxonomy_filter:
+            return Response([])
+
+        options = (
+            FilterOption.objects.filter(filter=taxonomy_filter)
+            .annotate(
+                product_count=Count(
+                    "productfilter",
+                    filter=Q(productfilter__product__is_active=True),
+                )
+            )
+            .order_by("id")
+        )
+
+        return Response([
+            {"id": o.id, "value": o.value, "product_count": o.product_count}
+            for o in options
+        ])
 
 
 # =====================================================

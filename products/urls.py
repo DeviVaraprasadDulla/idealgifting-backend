@@ -9,7 +9,8 @@ from .views import (
     CategoryDetailAPIView,
     SubmitReviewAPIView,
     FeaturedProductAPIView,
-    CategoryFilterAPIView
+    CategoryFilterAPIView,
+    TaxonomyListAPIView,
 )
 
 urlpatterns = [
@@ -34,6 +35,11 @@ urlpatterns = [
     # Filters (Category-level)
     # =========================
     path("filters/", CategoryFilterAPIView.as_view()),
+
+    # =========================
+    # Taxonomy (Occasion / Recipient / Feeling / Price Band)
+    # =========================
+    path("taxonomy/<str:name>/", TaxonomyListAPIView.as_view()),
 
     # =========================
     # Products
