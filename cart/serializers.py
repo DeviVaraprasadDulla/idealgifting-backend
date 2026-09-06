@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import CartItem
+from products.serializers import ProductFilterSerializer
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -31,8 +32,22 @@ class CartItemSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    product_slug = serializers.CharField(
+        source="product.slug",
+        read_only=True
+    )
+
     product_category = serializers.IntegerField(
         source="product.category.id",
+        read_only=True
+    )
+
+    # Real tagged Occasion/Feeling filters, reused by the frontend to
+    # derive the same color-world tint the product card/PDP already use
+    # for this product - never a fabricated or random assignment.
+    product_filters = ProductFilterSerializer(
+        source="product.productfilter_set",
+        many=True,
         read_only=True
     )
 
@@ -42,6 +57,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "id",
             "product",
             "product_id",
+            "product_slug",
             "product_category",
             "quantity",
             "product_name",
@@ -49,6 +65,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "original_price",
             "discount_percentage",
             "product_image",
+            "product_filters",
         ]
 
     # 🔥 GET FIRST PRODUCT IMAGE PROPERLY

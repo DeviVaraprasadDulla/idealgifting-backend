@@ -22,6 +22,7 @@ from .serializers import (
     SubCategorySerializer,
     ProductSerializer,
     CategoryWithSubSerializer,
+    ProductFilterSerializer,
 )
 
 
@@ -276,7 +277,7 @@ class ProductSearchAPIView(APIView):
                 Q(category__name__icontains=q) |
                 Q(subcategory__name__icontains=q)
             )
-            .prefetch_related("images")[:8]
+            .prefetch_related("images", "productfilter_set__filter_option__filter")[:8]
         )
 
         results = []
@@ -290,9 +291,12 @@ class ProductSearchAPIView(APIView):
 
             results.append({
                 "id": p.id,
+                "slug": p.slug,
                 "name": p.name,
                 "price": p.price,
-                "image": image_url
+                "image": image_url,
+                "category_name": p.category.name if p.category_id else None,
+                "filters": ProductFilterSerializer(p.productfilter_set.all(), many=True).data,
             })
 
         return Response(results)
