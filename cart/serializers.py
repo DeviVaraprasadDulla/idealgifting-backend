@@ -11,17 +11,17 @@ class CartItemSerializer(serializers.ModelSerializer):
     )
 
     product_price = serializers.SerializerMethodField()
-    original_price = serializers.DecimalField(
-        source="product.price",
-        max_digits=10,
-        decimal_places=2,
-        read_only=True
-    )
+    original_price = serializers.SerializerMethodField()
 
     discount_percentage = serializers.IntegerField(
         source="product.discount_percentage",
         read_only=True
     )
+
+    # Selected size/page-count option, if any - null for every product
+    # without variants (unchanged behaviour).
+    variant_id = serializers.IntegerField(source="variant.id", read_only=True, default=None)
+    variant_label = serializers.CharField(source="variant.label", read_only=True, default=None)
 
     # 🔥 FIXED IMAGE FIELD
     product_image = serializers.SerializerMethodField()
@@ -59,6 +59,8 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_id",
             "product_slug",
             "product_category",
+            "variant_id",
+            "variant_label",
             "quantity",
             "product_name",
             "product_price",
@@ -78,8 +80,18 @@ class CartItemSerializer(serializers.ModelSerializer):
             return request.build_absolute_uri(first_image.image.url)
 
         return None
+
+    def _base_price(self, obj):
+        """The selected variant's price when one is set, otherwise the
+        product's own flat price - the same base the discount formula
+        already applies to, unchanged."""
+        return obj.variant.price if obj.variant_id else obj.product.price
+
+    def get_original_price(self, obj):
+        return float(self._base_price(obj))
+
     def get_product_price(self, obj):
-        price = obj.product.price
+        price = self._base_price(obj)
         discount = obj.product.discount_percentage
 
         if discount > 0:

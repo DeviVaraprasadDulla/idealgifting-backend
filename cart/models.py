@@ -2,7 +2,7 @@
 
 from django.db import models
 from django.contrib.auth.models import User
-from products.models import Product
+from products.models import Product, ProductVariant
 
 
 # ============================================
@@ -53,10 +53,22 @@ class CartItem(models.Model):
         on_delete=models.CASCADE
     )
 
+    # Selected size/page-count option, if this product has any. Null for
+    # every product without variants (unchanged behaviour). A product
+    # with two different variants in the same cart must occupy two
+    # separate CartItem rows - see unique_together below.
+    variant = models.ForeignKey(
+        ProductVariant,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True
+    )
+
     quantity = models.PositiveIntegerField(default=1)
 
     class Meta:
-        unique_together = ("cart", "product")
+        unique_together = ("cart", "product", "variant")
 
     def __str__(self):
-        return f"{self.product.name} x {self.quantity}"
+        variant_label = f" ({self.variant.label})" if self.variant else ""
+        return f"{self.product.name}{variant_label} x {self.quantity}"

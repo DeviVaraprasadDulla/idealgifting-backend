@@ -8,6 +8,7 @@ from .views import (
     UpdateAddressAPIView,
     DeleteAddressAPIView,
     OrderTrackingAPIView,
+    OrderTrackByNumberAPIView,
     MarkOrderPaidAPIView,
     CancelOrderAPIView
 )
@@ -45,6 +46,13 @@ urlpatterns = [
     OrderTrackingAPIView.as_view(),
     name="order-tracking"
 ),
+
+    # Track order by its human-readable order number (e.g. IG-000042)
+    path(
+        "track-by-number/",
+        OrderTrackByNumberAPIView.as_view(),
+        name="order-track-by-number"
+    ),
 
     # Internal/Webhook route to mark order as PAID
     path(

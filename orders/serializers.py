@@ -11,11 +11,12 @@ class AddressSerializer(serializers.ModelSerializer):
 class OrderItemSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="product_name")
     image = serializers.CharField(source="product_image")
+    variant = serializers.JSONField(source="variant_snapshot")
     personalization = serializers.JSONField(source="personalization_snapshot")
 
     class Meta:
         model = OrderItem
-        fields = ["name", "image", "price", "quantity", "personalization"]
+        fields = ["name", "image", "price", "quantity", "variant", "personalization"]
 
 
 class OrderSerializer(serializers.ModelSerializer):

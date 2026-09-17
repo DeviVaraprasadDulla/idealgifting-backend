@@ -47,7 +47,7 @@ class CreateOrderAPIView(APIView):
         if not cart:
             return Response({"error": "Cart expired"}, status=400)
 
-        items = CartItem.objects.select_related("product").filter(cart=cart)
+        items = CartItem.objects.select_related("product", "variant").filter(cart=cart)
 
         if not items.exists():
             return Response({"error": "Cart is empty"}, status=400)
@@ -72,13 +72,14 @@ class CreateOrderAPIView(APIView):
         total = 0
 
         for item in items:
-            discounted_price = item.product.price
+            base_price = item.variant.price if item.variant_id else item.product.price
+            discounted_price = base_price
 
             if item.product.discount_percentage > 0:
                 discounted_price = (
-                    item.product.price
+                    base_price
                     - (
-                        item.product.price
+                        base_price
                         * item.product.discount_percentage
                         / 100
                     )
@@ -107,13 +108,14 @@ class CreateOrderAPIView(APIView):
             if first_image:
                 image_url = f"{request_scheme}://{request_host}{first_image.image.url}"
 
-            discounted_price = item.product.price
+            base_price = item.variant.price if item.variant_id else item.product.price
+            discounted_price = base_price
 
             if item.product.discount_percentage > 0:
                 discounted_price = (
-                    item.product.price
+                    base_price
                     - (
-                        item.product.price
+                        base_price
                         * item.product.discount_percentage
                         / 100
                     )
@@ -128,6 +130,10 @@ class CreateOrderAPIView(APIView):
                 product_image=image_url,
                 price=discounted_price,
                 quantity=item.quantity,
+                variant_snapshot=(
+                    {"id": item.variant.id, "label": item.variant.label, "price": str(item.variant.price)}
+                    if item.variant_id else None
+                ),
                 personalization_snapshot=(
                     personalization.to_snapshot(request) if personalization else None
                 ),
@@ -226,6 +232,7 @@ class OrderByTokenAPIView(APIView):
                     "image": i.product_image,
                     "price": i.price,
                     "quantity": i.quantity,
+                    "variant": i.variant_snapshot,
                     "personalization": i.personalization_snapshot,
                 }
                 for i in order.items.all()
@@ -263,6 +270,7 @@ class MyOrdersAPIView(APIView):
                         "image": i.product_image,
                         "price": i.price,
                         "quantity": i.quantity,
+                        "variant": i.variant_snapshot,
                         "personalization": i.personalization_snapshot,
                     }
                     for i in o.items.all()
@@ -295,6 +303,7 @@ class OrderTrackingAPIView(APIView):
 
         return Response({
             "order_token": str(order.public_token),
+            "order_number": order.order_number,
             "order_status": order.order_status,
             "tracking_id": order.tracking_id,
             "created_at": order.created_at,
@@ -306,6 +315,30 @@ class OrderTrackingAPIView(APIView):
                 for h in order.status_history.all().order_by("updated_at")
             ]
         })
+
+
+# ============================================================
+# TRACK BY HUMAN-READABLE ORDER NUMBER (e.g. "IG-000042")
+# ============================================================
+
+class OrderTrackByNumberAPIView(APIView):
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        raw = request.GET.get("order_number", "").strip().upper()
+        digits = raw[3:] if raw.startswith("IG-") else raw
+
+        if not digits.isdigit():
+            return Response({"error": "Enter a valid order number, e.g. IG-000042"}, status=400)
+
+        try:
+            order = Order.objects.get(id=int(digits), user=request.user)
+        except Order.DoesNotExist:
+            return Response({"error": "Order not found"}, status=404)
+
+        return Response({"order_token": str(order.public_token)})
 
 
 # ============================================================
