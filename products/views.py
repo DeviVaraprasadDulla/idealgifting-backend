@@ -171,7 +171,7 @@ class ProductListAPIView(ListAPIView):
             Product.objects
             .filter(is_active=True)
             .select_related("category", "subcategory")
-            .prefetch_related("images", "productfilter_set", "reviews")
+            .prefetch_related("images", "productfilter_set", "reviews", "variants")
         )
 
         category_slug = self.request.query_params.get("category_slug")
@@ -197,11 +197,19 @@ class ProductListAPIView(ListAPIView):
             queryset = queryset.filter(subcategory__slug=subcategory_slug)
 
         # 🎯 FILTER OPTIONS
+        # AND across different filter types (e.g. an Occasion AND a
+        # Recipient both selected), OR within the same filter type (e.g.
+        # two colours picked from one group) - plain __in on the whole
+        # list would OR everything together and match a product tagged
+        # with just one of several unrelated filters.
         if filter_ids:
-            filter_ids = filter_ids.split(",")
-            queryset = queryset.filter(
-                productfilter__filter_option_id__in=filter_ids
-            ).distinct()
+            ids = filter_ids.split(",")
+            grouped = {}
+            for opt in FilterOption.objects.filter(id__in=ids).values("id", "filter_id"):
+                grouped.setdefault(opt["filter_id"], []).append(opt["id"])
+            for option_ids in grouped.values():
+                queryset = queryset.filter(productfilter__filter_option_id__in=option_ids)
+            queryset = queryset.distinct()
 
         # 🔃 SORTING
         if sort == "price_low":
@@ -229,7 +237,7 @@ class FeaturedProductAPIView(ListAPIView):
             Product.objects
             .filter(is_active=True, is_featured=True)
             .select_related("category", "subcategory")
-            .prefetch_related("images")
+            .prefetch_related("images", "variants")
             .order_by("order")[:8]
         )
 
@@ -252,7 +260,8 @@ class ProductDetailAPIView(RetrieveAPIView):
             .select_related("category", "subcategory")
             .prefetch_related(
                 "images",
-                "productfilter_set"
+                "productfilter_set",
+                "variants"
             )
         )
 
