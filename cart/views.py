@@ -110,7 +110,12 @@ class CartItemListAPIView(ListAPIView):
         if not cart:
             return CartItem.objects.none()
 
-        return CartItem.objects.filter(cart=cart).select_related("product", "variant")
+        return (
+            CartItem.objects
+            .filter(cart=cart)
+            .select_related("product", "variant", "personalization")
+            .prefetch_related("personalization__photos")
+        )
 
     # 🔥 Important for image absolute URL
     def get_serializer_context(self):

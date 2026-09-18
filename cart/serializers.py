@@ -23,6 +23,12 @@ class CartItemSerializer(serializers.ModelSerializer):
     variant_id = serializers.IntegerField(source="variant.id", read_only=True, default=None)
     variant_label = serializers.CharField(source="variant.label", read_only=True, default=None)
 
+    # How many personalisation photos are attached, if any - lets the
+    # cart drawer/page show "4 Photos" without a separate API call per
+    # line. Relies on the view prefetching personalization__photos so
+    # this never triggers an extra query per cart item.
+    personalization_photo_count = serializers.SerializerMethodField()
+
     # 🔥 FIXED IMAGE FIELD
     product_image = serializers.SerializerMethodField()
 
@@ -61,6 +67,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "product_category",
             "variant_id",
             "variant_label",
+            "personalization_photo_count",
             "quantity",
             "product_name",
             "product_price",
@@ -71,6 +78,12 @@ class CartItemSerializer(serializers.ModelSerializer):
         ]
 
     # 🔥 GET FIRST PRODUCT IMAGE PROPERLY
+    def get_personalization_photo_count(self, obj):
+        personalization = getattr(obj, "personalization", None)
+        if not personalization:
+            return 0
+        return len(personalization.ordered_photos())
+
     def get_product_image(self, obj):
         request = self.context.get("request")
 

@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Prefetch
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
@@ -47,7 +47,12 @@ class CreateOrderAPIView(APIView):
         if not cart:
             return Response({"error": "Cart expired"}, status=400)
 
-        items = CartItem.objects.select_related("product", "variant").filter(cart=cart)
+        items = (
+            CartItem.objects
+            .select_related("product", "variant", "personalization")
+            .prefetch_related("personalization__photos")
+            .filter(cart=cart)
+        )
 
         if not items.exists():
             return Response({"error": "Cart is empty"}, status=400)
