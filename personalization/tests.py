@@ -4,6 +4,8 @@ from decimal import Decimal
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.test import Client as DjangoTestClient
+from django.urls import reverse
 from PIL import Image
 from rest_framework.test import APIClient
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -448,3 +450,94 @@ class GuestCartMergePersonalizationTests(TestCase):
         self.assertEqual(len(merged_items), 2)
         variant_ids = {i.variant_id for i in merged_items}
         self.assertEqual(variant_ids, {self.variant.id, small.id})
+
+
+class PersonalizationMediaAndAdminTests(TestCase):
+    """Covers the actual reported issue: uploaded photos not displaying
+    in Django Admin. Verifies the full chain end to end - what gets
+    stored in the DB, what URL it resolves to, that the URL is really
+    served by Django, and that the Admin page renders a real <img> for
+    every photo (not just the first, and not a broken link)."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.staff = User.objects.create_user(
+            username="media-admin-tester", password="testpass123", is_staff=True, is_superuser=True,
+        )
+        self.django_client = DjangoTestClient()
+        self.django_client.force_login(self.staff)
+
+        self.category = Category.objects.create(name="Test Frames", slug="frames-media-admin-test")
+        self.product = Product.objects.create(
+            category=self.category, name="Media Admin Test Frame", slug="media-admin-test-frame",
+            price=Decimal("699.00"), description="Test.", stock=10,
+        )
+        cart = Cart.objects.create(guest_id="media-admin-guest")
+        self.cart_item = CartItem.objects.create(cart=cart, product=self.product, quantity=1)
+        self.personalization = Personalization.objects.create(cart_item=self.cart_item, names="Media Test")
+
+    def test_uploaded_photo_stores_relative_path_not_absolute_url(self):
+        """The DB must hold a storage-relative path like
+        'personalizations/<id>/x.jpg' - never an absolute
+        'http://localhost:8000/...' URL. Building the accessible URL is
+        Django/the storage backend's job at read time via `.url`, not
+        something the app should pre-bake into the stored value."""
+        photo = PersonalizationPhoto.objects.create(
+            personalization=self.personalization, image=make_image("a.jpg"), display_order=0,
+        )
+        self.assertTrue(photo.image.name.startswith("personalizations/"))
+        self.assertNotIn("http://", photo.image.name)
+        self.assertNotIn("localhost", photo.image.name)
+        self.assertTrue(photo.image.url.startswith("/media/personalizations/"))
+
+    # Note: this suite does not re-assert "the media URL is actually
+    # servable over HTTP" via the Django test client, because Django's
+    # test runner forces settings.DEBUG=False for every test run
+    # (confirmed directly: printing settings.DEBUG inside a TestCase
+    # prints False even though the real dev server's .env has
+    # DEBUG=True) - and backend/urls.py only appends the dev-only
+    # `static(MEDIA_URL, ...)` route when DEBUG is True. So under the
+    # test runner there is never a route for /media/... regardless of
+    # whether the feature works, making that specific check untestable
+    # here through no fault of the app. It was instead verified directly
+    # against the real running dev server: `curl -s -o /dev/null -w
+    # "%{http_code} %{content_type}" http://localhost:8000/media/...`
+    # returned "200 image/jpeg" for a real uploaded photo.
+
+    def test_admin_change_page_renders_real_img_tag_for_uploaded_photo(self):
+        photo = PersonalizationPhoto.objects.create(
+            personalization=self.personalization, image=make_image("admin-preview.jpg"), display_order=0,
+        )
+        url = reverse("admin:personalization_personalization_change", args=[self.personalization.id])
+        res = self.django_client.get(url)
+        self.assertEqual(res.status_code, 200)
+        content = res.content.decode()
+        self.assertIn(f'<img src="{photo.image.url}"', content)
+
+    def test_admin_change_page_renders_every_photo_not_just_the_first(self):
+        photos = [
+            PersonalizationPhoto.objects.create(
+                personalization=self.personalization, image=make_image(f"p{i}.jpg"), display_order=i,
+            )
+            for i in range(4)
+        ]
+        url = reverse("admin:personalization_personalization_change", args=[self.personalization.id])
+        content = self.django_client.get(url).content.decode()
+        for photo in photos:
+            self.assertIn(f'<img src="{photo.image.url}"', content)
+
+    def test_admin_shows_legacy_single_photo_preview_for_backward_compatibility(self):
+        legacy = Personalization.objects.create(cart_item=self.cart_item2(), photo=make_image("legacy-admin.jpg"))
+        url = reverse("admin:personalization_personalization_change", args=[legacy.id])
+        content = self.django_client.get(url).content.decode()
+        self.assertIn(f'<img src="{legacy.photo.url}"', content)
+
+    def test_admin_shows_no_image_placeholder_text_without_crashing_when_empty(self):
+        url = reverse("admin:personalization_personalization_change", args=[self.personalization.id])
+        res = self.django_client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("No image", res.content.decode())
+
+    def cart_item2(self):
+        cart = Cart.objects.create(guest_id="media-admin-guest-2")
+        return CartItem.objects.create(cart=cart, product=self.product, quantity=1)
