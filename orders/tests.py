@@ -263,3 +263,70 @@ class OrderItemAdminPersonalizationDisplayTests(TestCase):
         content = self.django_client.get(self._change_url()).content.decode()
         self.assertIn("12x18 Inches", content)
         self.assertIn("1299.00", content)
+
+
+class OrderCustomerAPIPersonalizationTests(TestCase):
+    """Covers the customer-facing side of the same requirement: My
+    Orders and Order Details must actually receive photo references from
+    the API (the frontend renders whatever these endpoints return - if
+    the API omits photo_urls, no amount of frontend work can show them)."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username="order-api-tester", password="testpass123")
+        self.client = APIClient()
+        access = RefreshToken.for_user(self.user).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {access}")
+        self.order = Order.objects.create(user=self.user, total_amount=Decimal("1299.00"), payment_status="PAID")
+
+    def test_my_orders_includes_personalization_photo_urls(self):
+        OrderItem.objects.create(
+            order=self.order, product_name="Love Story Frame", price=Decimal("1299.00"), quantity=1,
+            personalization_snapshot={
+                "names": "John & Jane", "date": "2020", "message": "Hi", "style": "Elegant",
+                "photo_url": "/media/personalizations/1/a.jpg",
+                "photo_urls": ["/media/personalizations/1/a.jpg", "/media/personalizations/1/b.jpg"],
+            },
+        )
+        res = self.client.get("/api/orders/")
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        order = next(o for o in data if o["id"] == self.order.id)
+        item = order["items"][0]
+        self.assertEqual(item["personalization"]["names"], "John & Jane")
+        self.assertEqual(len(item["personalization"]["photo_urls"]), 2)
+
+    def test_order_by_token_includes_personalization_photo_urls(self):
+        OrderItem.objects.create(
+            order=self.order, product_name="Love Story Frame", price=Decimal("1299.00"), quantity=1,
+            personalization_snapshot={
+                "names": "John & Jane", "date": "2020", "message": "Hi", "style": "Elegant",
+                "photo_url": "/media/personalizations/1/a.jpg",
+                "photo_urls": ["/media/personalizations/1/a.jpg", "/media/personalizations/1/b.jpg"],
+            },
+        )
+        res = self.client.get(f"/api/orders/by-token/{self.order.public_token}/")
+        self.assertEqual(res.status_code, 200)
+        item = res.json()["items"][0]
+        self.assertEqual(len(item["personalization"]["photo_urls"]), 2)
+
+    def test_order_with_no_personalization_returns_null_not_error(self):
+        OrderItem.objects.create(
+            order=self.order, product_name="Plain Item", price=Decimal("499.00"), quantity=1,
+        )
+        res = self.client.get("/api/orders/")
+        self.assertEqual(res.status_code, 200)
+        item = res.json()[0]["items"][0]
+        self.assertIsNone(item["personalization"])
+
+    def test_order_with_legacy_photo_url_only_still_returns_it(self):
+        OrderItem.objects.create(
+            order=self.order, product_name="Legacy Item", price=Decimal("499.00"), quantity=1,
+            personalization_snapshot={
+                "names": "Legacy Customer", "date": "", "message": "", "style": "",
+                "photo_url": "/media/personalizations/legacy/old.jpg",
+                # deliberately no photo_urls key, matching pre-multi-photo orders
+            },
+        )
+        res = self.client.get("/api/orders/")
+        item = res.json()[0]["items"][0]
+        self.assertEqual(item["personalization"]["photo_url"], "/media/personalizations/legacy/old.jpg")

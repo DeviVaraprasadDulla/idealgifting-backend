@@ -70,9 +70,16 @@ def _snapshot_image_preview(url, size=110):
 
 
 def _snapshot_meta_lines(snapshot):
+    """Defensive against genuinely old/malformed snapshot shapes (e.g. a
+    value stored as a list instead of a string) - normalizes to a plain
+    string rather than crashing or dumping a Python repr into the page."""
     lines = []
     for key, label in [("names", "Names"), ("date", "Date"), ("message", "Message"), ("style", "Style")]:
         value = snapshot.get(key)
+        if isinstance(value, (list, tuple, set)):
+            value = ", ".join(str(v) for v in value if v)
+        elif value is not None and not isinstance(value, str):
+            value = str(value)
         if value:
             lines.append(format_html("<b>{}:</b> {}", label, value))
     return lines
@@ -127,17 +134,21 @@ class OrderItemInline(admin.StackedInline):
     @admin.display(description="Personalization")
     def personalization_display(self, obj):
         snap = obj.personalization_snapshot
-        if not snap:
+        if not snap or not isinstance(snap, dict):
             return "—"
 
         # Multi-photo orders store `photo_urls` (a list); a handful of
         # orders placed before multi-photo support existed only have the
         # single legacy `photo_url` key - fall back to that so an old
-        # order's one photo still displays instead of nothing.
+        # order's one photo still displays instead of nothing. Guarded
+        # against any malformed shape (not a list, non-string entries)
+        # rather than trusting the stored JSON blindly.
         photo_urls = snap.get("photo_urls")
+        if not isinstance(photo_urls, list):
+            photo_urls = None
         if not photo_urls and snap.get("photo_url"):
             photo_urls = [snap["photo_url"]]
-        photo_urls = photo_urls or []
+        photo_urls = [u for u in (photo_urls or []) if isinstance(u, str) and u]
 
         thumbs_html = ""
         if photo_urls:

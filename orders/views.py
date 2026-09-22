@@ -221,16 +221,23 @@ class OrderByTokenAPIView(APIView):
             "total_amount": order.total_amount,
             "tracking_id": order.tracking_id,
             "created_at": order.created_at,
-            "address": {
-                "first_name": address.first_name,
-                "last_name": address.last_name,
-                "phone": address.phone,
-                "address_line1": address.address_line1,
-                "address_line2": address.address_line2,
-                "city": address.city,
-                "state": address.state,
-                "zip_code": address.zip_code,
-            },
+            # Order.address is nullable at the model level (e.g. an order
+            # created directly in Admin without one) - the normal
+            # checkout flow always sets it, but the customer-facing API
+            # must not 500 for the rare order that doesn't have one.
+            "address": (
+                {
+                    "first_name": address.first_name,
+                    "last_name": address.last_name,
+                    "phone": address.phone,
+                    "address_line1": address.address_line1,
+                    "address_line2": address.address_line2,
+                    "city": address.city,
+                    "state": address.state,
+                    "zip_code": address.zip_code,
+                }
+                if address else None
+            ),
             "items": [
                 {
                     "name": i.product_name,
@@ -259,7 +266,7 @@ class MyOrdersAPIView(APIView):
         orders = Order.objects.filter(
             user=request.user,
             payment_status="PAID"
-        ).order_by("-created_at")
+        ).order_by("-created_at").prefetch_related("items")
 
         return Response([
             {

@@ -5,6 +5,8 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from products.models import Category, Product, ProductVariant
+from personalization.models import Personalization, PersonalizationPhoto
+from personalization.tests import make_image
 
 
 class CartVariantTests(TestCase):
@@ -110,3 +112,75 @@ class CartVariantTests(TestCase):
         items = self.client.get("/api/cart/items/", **self.guest_headers).json()
         self.assertIsNone(items[0]["variant_id"])
         self.assertEqual(float(items[0]["product_price"]), 899.0)
+
+
+class CartPersonalizationSerializationTests(TestCase):
+    """Covers the actual gap behind the reported issue: the cart API
+    only ever told the frontend HOW MANY photos existed
+    (personalization_photo_count), never the photos themselves - so
+    Cart/Mini Cart/Checkout had no way to render real thumbnails at all,
+    regardless of what Admin displayed."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.category = Category.objects.create(name="Test Frames", slug="frames-cart-personalization-test")
+        self.product = Product.objects.create(
+            category=self.category, name="Cart Personalization Frame", slug="cart-personalization-frame",
+            price=Decimal("699.00"), description="Test.", stock=10,
+        )
+        self.guest_headers = {"HTTP_X_GUEST_ID": "test-guest-cart-personalization"}
+
+    def _add_and_get_item(self):
+        self.client.post("/api/cart/add/", {"product": self.product.id, "quantity": 1}, **self.guest_headers)
+        items = self.client.get("/api/cart/items/", **self.guest_headers).json()
+        return items[0]
+
+    def test_cart_item_without_personalization_has_null_field(self):
+        item = self._add_and_get_item()
+        self.assertIsNone(item["personalization"])
+        self.assertEqual(item["personalization_photo_count"], 0)
+
+    def test_cart_item_with_one_photo_returns_real_photo_url(self):
+        from cart.models import CartItem
+        item = self._add_and_get_item()
+        cart_item = CartItem.objects.get(pk=item["id"])
+        personalization = Personalization.objects.create(cart_item=cart_item, names="Solo Test")
+        PersonalizationPhoto.objects.create(personalization=personalization, image=make_image("a.jpg"), display_order=0)
+
+        item = self._add_and_get_item()
+        self.assertIsNotNone(item["personalization"])
+        self.assertEqual(item["personalization"]["names"], "Solo Test")
+        self.assertEqual(len(item["personalization"]["photos"]), 1)
+        self.assertTrue("/media/personalizations/" in item["personalization"]["photos"][0]["image"])
+
+    def test_cart_item_with_multiple_photos_returns_all_in_order(self):
+        from cart.models import CartItem
+        item = self._add_and_get_item()
+        cart_item = CartItem.objects.get(pk=item["id"])
+        personalization = Personalization.objects.create(
+            cart_item=cart_item, names="Multi Test", style="Elegant", message="Hi", date="2020",
+        )
+        for i, name in enumerate(["a.jpg", "b.jpg", "c.jpg", "d.jpg"]):
+            PersonalizationPhoto.objects.create(personalization=personalization, image=make_image(name), display_order=i)
+
+        item = self._add_and_get_item()
+        photos = item["personalization"]["photos"]
+        self.assertEqual(len(photos), 4)
+        self.assertEqual([p["display_order"] for p in photos], [0, 1, 2, 3])
+        self.assertEqual(item["personalization"]["style"], "Elegant")
+        self.assertEqual(item["personalization"]["message"], "Hi")
+
+    def test_cart_item_with_legacy_single_photo_field_still_serializes(self):
+        """A pre-multi-photo personalisation (only the deprecated `photo`
+        field populated, no PersonalizationPhoto rows) must not crash the
+        cart API and must still expose that legacy photo."""
+        from cart.models import CartItem
+        item = self._add_and_get_item()
+        cart_item = CartItem.objects.get(pk=item["id"])
+        Personalization.objects.create(cart_item=cart_item, names="Legacy Test", photo=make_image("legacy.jpg"))
+
+        item = self._add_and_get_item()
+        self.assertIsNotNone(item["personalization"])
+        self.assertEqual(item["personalization"]["names"], "Legacy Test")
+        self.assertEqual(len(item["personalization"]["photos"]), 0)
+        self.assertTrue("/media/personalizations/" in item["personalization"]["photo"])

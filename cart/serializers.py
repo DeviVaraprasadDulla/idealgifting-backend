@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import CartItem
 from products.serializers import ProductFilterSerializer
+from personalization.serializers import PersonalizationSerializer
 
 
 class CartItemSerializer(serializers.ModelSerializer):
@@ -28,6 +29,13 @@ class CartItemSerializer(serializers.ModelSerializer):
     # line. Relies on the view prefetching personalization__photos so
     # this never triggers an extra query per cart item.
     personalization_photo_count = serializers.SerializerMethodField()
+
+    # Full personalisation payload (names/date/message/style + every
+    # uploaded photo, as real server-side media URLs) - null when this
+    # line has no personalisation. Reuses the same serializer the
+    # Personalisation Studio API already returns, so the cart/checkout
+    # UI can render actual photo thumbnails, not just a count.
+    personalization = serializers.SerializerMethodField()
 
     # 🔥 FIXED IMAGE FIELD
     product_image = serializers.SerializerMethodField()
@@ -68,6 +76,7 @@ class CartItemSerializer(serializers.ModelSerializer):
             "variant_id",
             "variant_label",
             "personalization_photo_count",
+            "personalization",
             "quantity",
             "product_name",
             "product_price",
@@ -83,6 +92,12 @@ class CartItemSerializer(serializers.ModelSerializer):
         if not personalization:
             return 0
         return len(personalization.ordered_photos())
+
+    def get_personalization(self, obj):
+        personalization = getattr(obj, "personalization", None)
+        if not personalization:
+            return None
+        return PersonalizationSerializer(personalization, context=self.context).data
 
     def get_product_image(self, obj):
         request = self.context.get("request")
