@@ -148,7 +148,18 @@ python manage.py collectstatic --noinput
 echo "=== Wrote deploy marker: $(cat DEPLOYED_COMMIT.txt | tr '\n' ' ') ==="
 
 echo "=== Restarting Gunicorn service ==="
+PID_BEFORE="$(systemctl show idealgifting -p MainPID --value 2>&1)"
 systemctl restart idealgifting
+sleep 2
+PID_AFTER="$(systemctl show idealgifting -p MainPID --value 2>&1)"
+echo "idealgifting MainPID before restart: $PID_BEFORE, after: $PID_AFTER"
+if [ "$PID_BEFORE" = "$PID_AFTER" ]; then
+  echo "❌ systemctl restart idealgifting did NOT actually cycle the process (MainPID unchanged)."
+  echo "   This service is not reloading new code - investigate the unit directly on the VPS:"
+  echo "   systemctl status idealgifting ; systemctl show idealgifting -p WorkingDirectory,ExecStart"
+  exit 1
+fi
+echo "✅ Gunicorn process actually restarted (PID changed)."
 
 echo "=== Reloading Nginx ==="
 systemctl reload nginx
