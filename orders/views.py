@@ -9,7 +9,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from django.db import transaction
-from django.db.models import F
+from django.db.models import F, Prefetch
 from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
@@ -47,7 +47,12 @@ class CreateOrderAPIView(APIView):
         if not cart:
             return Response({"error": "Cart expired"}, status=400)
 
-        items = CartItem.objects.select_related("product").filter(cart=cart)
+        items = (
+            CartItem.objects
+            .select_related("product", "variant", "personalization")
+            .prefetch_related("personalization__photos")
+            .filter(cart=cart)
+        )
 
         if not items.exists():
             return Response({"error": "Cart is empty"}, status=400)
@@ -72,13 +77,14 @@ class CreateOrderAPIView(APIView):
         total = 0
 
         for item in items:
-            discounted_price = item.product.price
+            base_price = item.variant.price if item.variant_id else item.product.price
+            discounted_price = base_price
 
             if item.product.discount_percentage > 0:
                 discounted_price = (
-                    item.product.price
+                    base_price
                     - (
-                        item.product.price
+                        base_price
                         * item.product.discount_percentage
                         / 100
                     )
@@ -107,17 +113,20 @@ class CreateOrderAPIView(APIView):
             if first_image:
                 image_url = f"{request_scheme}://{request_host}{first_image.image.url}"
 
-            discounted_price = item.product.price
+            base_price = item.variant.price if item.variant_id else item.product.price
+            discounted_price = base_price
 
             if item.product.discount_percentage > 0:
                 discounted_price = (
-                    item.product.price
+                    base_price
                     - (
-                        item.product.price
+                        base_price
                         * item.product.discount_percentage
                         / 100
                     )
                 )
+
+            personalization = getattr(item, "personalization", None)
 
             OrderItem.objects.create(
                 order=order,
@@ -125,7 +134,14 @@ class CreateOrderAPIView(APIView):
                 product_name=item.product.name,
                 product_image=image_url,
                 price=discounted_price,
-                quantity=item.quantity
+                quantity=item.quantity,
+                variant_snapshot=(
+                    {"id": item.variant.id, "label": item.variant.label, "price": str(item.variant.price)}
+                    if item.variant_id else None
+                ),
+                personalization_snapshot=(
+                    personalization.to_snapshot(request) if personalization else None
+                ),
             )
 
         return Response({
@@ -205,22 +221,31 @@ class OrderByTokenAPIView(APIView):
             "total_amount": order.total_amount,
             "tracking_id": order.tracking_id,
             "created_at": order.created_at,
-            "address": {
-                "first_name": address.first_name,
-                "last_name": address.last_name,
-                "phone": address.phone,
-                "address_line1": address.address_line1,
-                "address_line2": address.address_line2,
-                "city": address.city,
-                "state": address.state,
-                "zip_code": address.zip_code,
-            },
+            # Order.address is nullable at the model level (e.g. an order
+            # created directly in Admin without one) - the normal
+            # checkout flow always sets it, but the customer-facing API
+            # must not 500 for the rare order that doesn't have one.
+            "address": (
+                {
+                    "first_name": address.first_name,
+                    "last_name": address.last_name,
+                    "phone": address.phone,
+                    "address_line1": address.address_line1,
+                    "address_line2": address.address_line2,
+                    "city": address.city,
+                    "state": address.state,
+                    "zip_code": address.zip_code,
+                }
+                if address else None
+            ),
             "items": [
                 {
                     "name": i.product_name,
                     "image": i.product_image,
                     "price": i.price,
-                    "quantity": i.quantity
+                    "quantity": i.quantity,
+                    "variant": i.variant_snapshot,
+                    "personalization": i.personalization_snapshot,
                 }
                 for i in order.items.all()
             ]
@@ -241,7 +266,7 @@ class MyOrdersAPIView(APIView):
         orders = Order.objects.filter(
             user=request.user,
             payment_status="PAID"
-        ).order_by("-created_at")
+        ).order_by("-created_at").prefetch_related("items")
 
         return Response([
             {
@@ -256,7 +281,9 @@ class MyOrdersAPIView(APIView):
                         "name": i.product_name,
                         "image": i.product_image,
                         "price": i.price,
-                        "quantity": i.quantity
+                        "quantity": i.quantity,
+                        "variant": i.variant_snapshot,
+                        "personalization": i.personalization_snapshot,
                     }
                     for i in o.items.all()
                 ]
@@ -288,6 +315,7 @@ class OrderTrackingAPIView(APIView):
 
         return Response({
             "order_token": str(order.public_token),
+            "order_number": order.order_number,
             "order_status": order.order_status,
             "tracking_id": order.tracking_id,
             "created_at": order.created_at,
@@ -299,6 +327,30 @@ class OrderTrackingAPIView(APIView):
                 for h in order.status_history.all().order_by("updated_at")
             ]
         })
+
+
+# ============================================================
+# TRACK BY HUMAN-READABLE ORDER NUMBER (e.g. "IG-000042")
+# ============================================================
+
+class OrderTrackByNumberAPIView(APIView):
+
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        raw = request.GET.get("order_number", "").strip().upper()
+        digits = raw[3:] if raw.startswith("IG-") else raw
+
+        if not digits.isdigit():
+            return Response({"error": "Enter a valid order number, e.g. IG-000042"}, status=400)
+
+        try:
+            order = Order.objects.get(id=int(digits), user=request.user)
+        except Order.DoesNotExist:
+            return Response({"error": "Order not found"}, status=404)
+
+        return Response({"order_token": str(order.public_token)})
 
 
 # ============================================================

@@ -7,6 +7,7 @@ from .models import (
     SubCategory,
     Product,
     ProductImage,
+    ProductVariant,
     Filter,
     FilterOption,
     ProductFilter,
@@ -74,6 +75,16 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 
 # =========================================================
+# PRODUCT VARIANTS
+# =========================================================
+
+class ProductVariantSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductVariant
+        fields = ["id", "label", "price", "order", "is_active"]
+
+
+# =========================================================
 # FILTERS
 # =========================================================
 
@@ -138,6 +149,7 @@ class ReviewSerializer(serializers.ModelSerializer):
 
 class ProductSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source="category.name", read_only=True)
+    category_slug = serializers.CharField(source="category.slug", read_only=True)
     subcategory_name = serializers.CharField(
         source="subcategory.name",
         read_only=True
@@ -150,6 +162,8 @@ class ProductSerializer(serializers.ModelSerializer):
         many=True,
         read_only=True
     )
+
+    variants = serializers.SerializerMethodField()
 
     discounted_price = serializers.SerializerMethodField()
 
@@ -176,13 +190,19 @@ class ProductSerializer(serializers.ModelSerializer):
             "category",
             "subcategory",
             "category_name",
+            "category_slug",
             "subcategory_name",
             "images",
             "filters",
+            "variants",
             "average_rating",
             "rating_count",
             "reviews",
         ]
+
+    def get_variants(self, obj):
+        active_variants = [v for v in obj.variants.all() if v.is_active]
+        return ProductVariantSerializer(active_variants, many=True).data
 
     def get_discounted_price(self, obj):
         if obj.discount_percentage > 0:

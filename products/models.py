@@ -137,6 +137,37 @@ class ProductImage(models.Model):
 
 
 # ============================================
+# PRODUCT VARIANTS (size / page-count pricing)
+# ============================================
+# A product with configurable options (a Frame's size, a Magazine's page
+# count) gets one row per selectable option here, each with its own real
+# price. Products without variants simply have none and keep using
+# Product.price/discount_percentage exactly as before - this table is
+# additive, not a replacement for the base price. The backend is always
+# the source of truth for a variant's price; the frontend only renders
+# what this table (via the API) says.
+
+class ProductVariant(models.Model):
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name="variants"
+    )
+    label = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    order = models.PositiveIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("product", "label")
+
+    def __str__(self):
+        return f"{self.product.name} - {self.label} (₹{self.price})"
+
+
+# ============================================
 # FILTERS
 # ============================================
 

@@ -14,6 +14,9 @@ staticfiles/
 .env.*
 *.env
 
+# Written by the deploy script at deploy time - a runtime artifact, not source.
+DEPLOYED_COMMIT.txt
+
 # Virtual environment
 venv/
 env/

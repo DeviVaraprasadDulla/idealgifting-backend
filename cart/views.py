@@ -7,7 +7,28 @@ from django.db.models import F
 from cart.models import CartItem
 from cart.serializers import CartItemSerializer
 from cart.utils import get_cart
-from products.models import Product
+from products.models import Product, ProductVariant
+
+
+def resolve_variant(request, product):
+    """Validate an optional variant id from the request against the given
+    product. Returns (variant_or_None, error_response_or_None) - the
+    caller returns error_response immediately if it isn't None. A
+    missing/blank variant id is valid (the product simply has no
+    variant selected); an id that doesn't belong to this product, isn't
+    active, or doesn't exist at all is always rejected - the price a
+    variant carries must never be trusted from anywhere but this lookup.
+    """
+    variant_id = request.data.get("variant")
+    if not variant_id:
+        return None, None
+
+    try:
+        variant = ProductVariant.objects.get(pk=variant_id, product=product, is_active=True)
+    except ProductVariant.DoesNotExist:
+        return None, Response({"error": "Invalid variant for this product"}, status=400)
+
+    return variant, None
 
 
 # =============================
@@ -36,7 +57,12 @@ class AddToCartAPIView(APIView):
         except Product.DoesNotExist:
             return Response({"error": "Product not found"}, status=404)
 
-        # Stock validation
+        variant, error = resolve_variant(request, product)
+        if error:
+            return error
+
+        # Stock validation (product-level - variants don't carry their
+        # own stock, per the existing single-stock-per-product model)
         if product.stock < quantity:
             return Response({"error": "Not enough stock"}, status=400)
 
@@ -52,6 +78,7 @@ class AddToCartAPIView(APIView):
         item, created = CartItem.objects.get_or_create(
             cart=cart,
             product=product,
+            variant=variant,
             defaults={"quantity": quantity}
         )
 
@@ -83,7 +110,12 @@ class CartItemListAPIView(ListAPIView):
         if not cart:
             return CartItem.objects.none()
 
-        return CartItem.objects.filter(cart=cart).select_related("product")
+        return (
+            CartItem.objects
+            .filter(cart=cart)
+            .select_related("product", "variant", "personalization")
+            .prefetch_related("personalization__photos")
+        )
 
     # 🔥 Important for image absolute URL
     def get_serializer_context(self):

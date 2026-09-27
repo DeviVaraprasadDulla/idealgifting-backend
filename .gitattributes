@@ -1,0 +1,5 @@
+# Shell scripts must always check out with LF line endings, even on a
+# Windows dev machine with core.autocrlf=true - a CRLF-terminated bash
+# script piped to `bash -s` on the Linux VPS breaks in subtle ways
+# (stray \r embedded in variables/comparisons).
+*.sh text eol=lf

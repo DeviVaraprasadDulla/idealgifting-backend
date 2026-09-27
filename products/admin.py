@@ -5,6 +5,7 @@ from .models import (
     SubCategory,
     Product,
     ProductImage,
+    ProductVariant,
     Filter,
     FilterOption,
     ProductFilter,
@@ -59,13 +60,19 @@ class ProductImageInline(admin.TabularInline):
     extra = 1
 
 
+class ProductVariantInline(admin.TabularInline):
+    model = ProductVariant
+    extra = 1
+    fields = ("label", "price", "order", "is_active")
+
+
 # =====================================================
 # PRODUCT
 # =====================================================
 
 @admin.register(Product)
 class ProductAdmin(ImportExportModelAdmin):
-    inlines = [ProductImageInline]
+    inlines = [ProductImageInline, ProductVariantInline]
 
     list_display = (
         "id",
@@ -98,6 +105,19 @@ class ProductAdmin(ImportExportModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     ordering = ("order",)
     search_fields = ("name", "description")
+
+
+# =====================================================
+# PRODUCT VARIANTS
+# =====================================================
+
+@admin.register(ProductVariant)
+class ProductVariantAdmin(admin.ModelAdmin):
+    list_display = ("id", "product", "label", "price", "order", "is_active")
+    list_editable = ("price", "order", "is_active")
+    list_filter = ("is_active", "product__category")
+    search_fields = ("label", "product__name")
+    ordering = ("product", "order")
 
 
 # =====================================================

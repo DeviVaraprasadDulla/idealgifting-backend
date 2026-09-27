@@ -11,6 +11,7 @@ from .models import (
     Category,
     SubCategory,
     Product,
+    Filter,
     FilterOption,
     Review,
     CategoryFilter,
@@ -21,6 +22,7 @@ from .serializers import (
     SubCategorySerializer,
     ProductSerializer,
     CategoryWithSubSerializer,
+    ProductFilterSerializer,
 )
 
 
@@ -169,7 +171,7 @@ class ProductListAPIView(ListAPIView):
             Product.objects
             .filter(is_active=True)
             .select_related("category", "subcategory")
-            .prefetch_related("images", "productfilter_set", "reviews")
+            .prefetch_related("images", "productfilter_set", "reviews", "variants")
         )
 
         category_slug = self.request.query_params.get("category_slug")
@@ -195,11 +197,19 @@ class ProductListAPIView(ListAPIView):
             queryset = queryset.filter(subcategory__slug=subcategory_slug)
 
         # 🎯 FILTER OPTIONS
+        # AND across different filter types (e.g. an Occasion AND a
+        # Recipient both selected), OR within the same filter type (e.g.
+        # two colours picked from one group) - plain __in on the whole
+        # list would OR everything together and match a product tagged
+        # with just one of several unrelated filters.
         if filter_ids:
-            filter_ids = filter_ids.split(",")
-            queryset = queryset.filter(
-                productfilter__filter_option_id__in=filter_ids
-            ).distinct()
+            ids = filter_ids.split(",")
+            grouped = {}
+            for opt in FilterOption.objects.filter(id__in=ids).values("id", "filter_id"):
+                grouped.setdefault(opt["filter_id"], []).append(opt["id"])
+            for option_ids in grouped.values():
+                queryset = queryset.filter(productfilter__filter_option_id__in=option_ids)
+            queryset = queryset.distinct()
 
         # 🔃 SORTING
         if sort == "price_low":
@@ -227,7 +237,7 @@ class FeaturedProductAPIView(ListAPIView):
             Product.objects
             .filter(is_active=True, is_featured=True)
             .select_related("category", "subcategory")
-            .prefetch_related("images")
+            .prefetch_related("images", "variants")
             .order_by("order")[:8]
         )
 
@@ -250,7 +260,8 @@ class ProductDetailAPIView(RetrieveAPIView):
             .select_related("category", "subcategory")
             .prefetch_related(
                 "images",
-                "productfilter_set"
+                "productfilter_set",
+                "variants"
             )
         )
 
@@ -275,7 +286,7 @@ class ProductSearchAPIView(APIView):
                 Q(category__name__icontains=q) |
                 Q(subcategory__name__icontains=q)
             )
-            .prefetch_related("images")[:8]
+            .prefetch_related("images", "productfilter_set__filter_option__filter")[:8]
         )
 
         results = []
@@ -289,12 +300,50 @@ class ProductSearchAPIView(APIView):
 
             results.append({
                 "id": p.id,
+                "slug": p.slug,
                 "name": p.name,
                 "price": p.price,
-                "image": image_url
+                "image": image_url,
+                "category_name": p.category.name if p.category_id else None,
+                "filters": ProductFilterSerializer(p.productfilter_set.all(), many=True).data,
             })
 
         return Response(results)
+
+
+# =====================================================
+# TAXONOMY (Occasion / Recipient / Feeling / Price Band)
+# =====================================================
+# Read-only view over the existing generic Filter/FilterOption/
+# ProductFilter system - no new models. Lets the frontend list the real
+# options for a named taxonomy (e.g. "Occasion") with a live product
+# count for each, so Occasion/Recipient pages and the Gift Finder can
+# work against real data without a second, parallel taxonomy system.
+
+class TaxonomyListAPIView(APIView):
+    permission_classes = [AllowAny]
+
+    def get(self, request, name):
+        taxonomy_filter = Filter.objects.filter(name__iexact=name).first()
+
+        if not taxonomy_filter:
+            return Response([])
+
+        options = (
+            FilterOption.objects.filter(filter=taxonomy_filter)
+            .annotate(
+                product_count=Count(
+                    "productfilter",
+                    filter=Q(productfilter__product__is_active=True),
+                )
+            )
+            .order_by("id")
+        )
+
+        return Response([
+            {"id": o.id, "value": o.value, "product_count": o.product_count}
+            for o in options
+        ])
 
 
 # =====================================================
