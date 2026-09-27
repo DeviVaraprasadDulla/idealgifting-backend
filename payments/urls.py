@@ -8,7 +8,7 @@ from .views import (
 urlpatterns = [
     path("initiate/", InitiatePaymentAPIView.as_view()),
     path("webhook/", phonepe_webhook),
-        path(
+    path(
         "create-order/",
         CreateRazorpayOrderAPIView.as_view()
     ),

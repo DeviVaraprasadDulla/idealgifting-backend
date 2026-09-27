@@ -96,9 +96,20 @@ class Product(models.Model):
         ordering = ["order"]
 
     def save(self, *args, **kwargs):
-        if not self.slug:
-            self.slug = slugify(self.name)
+
+        is_new = self.pk is None
+
         super().save(*args, **kwargs)
+
+        if is_new and not self.slug:
+
+            Product.objects.filter(
+                pk=self.pk
+            ).update(
+                slug=f"{slugify(self.name)}-{self.id}"
+            )
+
+            self.slug = f"{slugify(self.name)}-{self.id}"
 
     def __str__(self):
         return self.name
