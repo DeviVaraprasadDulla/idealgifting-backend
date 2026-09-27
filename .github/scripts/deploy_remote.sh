@@ -92,6 +92,9 @@ git fetch origin
 git checkout main
 git pull --ff-only origin main
 
+DEPLOYED_COMMIT="$(git rev-parse HEAD)"
+echo "Deployed commit: $DEPLOYED_COMMIT"
+
 echo "=== Activating virtualenv ==="
 source venv/bin/activate
 
@@ -106,6 +109,20 @@ python manage.py migrate --noinput
 
 echo "=== Collecting static files (MEDIA_ROOT/user uploads are untouched by this) ==="
 python manage.py collectstatic --noinput
+
+# Publicly-fetchable, independently-checkable proof of exactly what
+# commit is live right now (git log -1 --stat for orders/admin.py
+# specifically, since that file is what keeps being asked about) -
+# collectstatic only ever adds/copies files here, it never clears
+# unrelated ones, so this survives across deploys and always reflects
+# the most recent one. Not a secret - just a commit hash and a log line.
+{
+  echo "commit: $DEPLOYED_COMMIT"
+  echo "deployed_at: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  echo "orders/admin.py last touched by:"
+  git log -1 --format="  %H %s" -- orders/admin.py
+} > staticfiles/deployed_commit.txt
+echo "=== Wrote deploy marker: $(cat staticfiles/deployed_commit.txt | tr '\n' ' ') ==="
 
 echo "=== Restarting Gunicorn service ==="
 systemctl restart idealgifting
