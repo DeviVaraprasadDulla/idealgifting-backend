@@ -95,6 +95,31 @@ git pull --ff-only origin main
 DEPLOYED_COMMIT="$(git rev-parse HEAD)"
 echo "Deployed commit: $DEPLOYED_COMMIT"
 
+# TEMPORARY INVESTIGATION: a previous deploy's marker file 404'd via
+# both Nginx (/static/) and Django (/deploy-info/) despite the job
+# reporting success, suggesting this checkout may not be the directory
+# Nginx/Gunicorn actually serve from. media/ is proven reachable (real
+# product images load), so write forensic info there instead - a
+# temporary, clearly-named file, deleted once the mismatch is found.
+mkdir -p media
+{
+  echo "=== deploy diagnostics ($(date -u +%Y-%m-%dT%H:%M:%SZ)) ==="
+  echo "commit: $DEPLOYED_COMMIT"
+  echo "pwd: $(pwd)"
+  echo "APP_DIR resolved: $(readlink -f "$APP_DIR" 2>&1)"
+  echo ""
+  echo "--- systemctl show idealgifting ---"
+  systemctl show idealgifting -p WorkingDirectory,ExecStart,FragmentPath,ActiveState,SubState,ExecMainStartTimestamp 2>&1
+  echo ""
+  echo "--- nginx config referencing idealgifting.in ---"
+  grep -rl "idealgifting.in" /etc/nginx/ 2>&1
+  grep -rA3 "location /media\|location /static\|location /deploy-info" /etc/nginx/sites-enabled/ /etc/nginx/conf.d/ 2>&1
+  echo ""
+  echo "--- other candidate app directories on this host ---"
+  find /var/www /home /opt /srv -maxdepth 4 -iname "*ideal*gift*" -o -iname "*idealgifting*" 2>/dev/null
+} > media/_deploy_diagnostics.txt 2>&1 || true
+echo "=== Wrote diagnostics to media/_deploy_diagnostics.txt ==="
+
 echo "=== Activating virtualenv ==="
 source venv/bin/activate
 
