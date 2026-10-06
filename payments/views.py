@@ -16,7 +16,9 @@ from orders.models import (
     Order,
     OrderStatusHistory
 )
+import logging
 
+logger = logging.getLogger(__name__)
 from orders.utils import send_order_email
 class InitiatePaymentAPIView(APIView):
 
@@ -224,13 +226,35 @@ class VerifyRazorpayPaymentAPIView(APIView):
         ).delete()
 
         try:
+            logger.info(
+                f"📧 Sending customer email for Order #{order.id} "
+                f"to {order.user.email}"
+            )
+
             send_order_email(
                 order.user.email,
                 order
             )
+
+            logger.info(
+                f"✅ Customer email sent successfully for Order #{order.id}"
+            )
+
+            logger.info(
+                f"📧 Sending admin email for Order #{order.id} "
+                f"to {settings.ADMIN_EMAIL}"
+            )
+
             send_admin_order_mail(order)
+
+            logger.info(
+                f"✅ Admin email sent successfully for Order #{order.id}"
+            )
+
         except Exception as e:
-            print("Email Error:", e)
+            logger.exception(
+                f"❌ Email sending failed for Order #{order.id}: {e}"
+            )
 
         return Response(
             {
