@@ -4,6 +4,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from orders.models import Order
+from payments.emails import send_admin_order_mail
 from .services.factory import get_payment_service
 from .services.razorpay import RazorpayService
 from backend import settings
@@ -227,6 +228,7 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 order.user.email,
                 order
             )
+            send_admin_order_mail(order)
         except Exception as e:
             print("Email Error:", e)
 
