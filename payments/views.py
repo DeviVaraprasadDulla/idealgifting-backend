@@ -225,28 +225,35 @@ class VerifyRazorpayPaymentAPIView(APIView):
             cart__user=order.user
         ).delete()
 
-        try:
-            print(f"📧 Sending customer email to {order.user.email}")
-            logger.info(f"📧 Sending customer email to {order.user.email}")
-            send_order_email(
-                order.user.email,
-                order
-            )
-            print("✅ Customer email sent successfully")
-            logger.info("✅ Customer email sent successfully")
-        except Exception as e:
-            print(f"❌ Customer email failed: {e}")
-            logger.exception(f"❌ Customer email failed: {e}")
+        customer_email = order.user.email if order.user else None
+        admin_email = getattr(settings, "ADMIN_EMAIL", None)
 
         try:
-            print(f"📧 Sending admin email to {settings.ADMIN_EMAIL}")
-            logger.info(f"📧 Sending admin email to {settings.ADMIN_EMAIL}")
-            send_admin_order_mail(order)
-            print("✅ Admin email sent successfully")
-            logger.info("✅ Admin email sent successfully")
+            print(f"📧 [Order #{order.order_number}] Sending customer email to {customer_email}", flush=True)
+            logger.info(f"📧 [Order #{order.order_number}] Sending customer email to {customer_email}")
+            if customer_email:
+                send_order_email(
+                    customer_email,
+                    order
+                )
+                print(f"✅ [Order #{order.order_number}] Customer email sent successfully", flush=True)
+                logger.info(f"✅ [Order #{order.order_number}] Customer email sent successfully")
+            else:
+                print(f"⚠️ [Order #{order.order_number}] Customer has no email address configured", flush=True)
+                logger.warning(f"⚠️ [Order #{order.order_number}] Customer has no email address configured")
         except Exception as e:
-            print(f"❌ Admin email failed: {e}")
-            logger.exception(f"❌ Admin email failed: {e}")
+            print(f"❌ [Order #{order.order_number}] Customer email failed: {e}", flush=True)
+            logger.exception(f"❌ [Order #{order.order_number}] Customer email failed: {e}")
+
+        try:
+            print(f"📧 [Order #{order.order_number}] Sending admin email to {admin_email}", flush=True)
+            logger.info(f"📧 [Order #{order.order_number}] Sending admin email to {admin_email}")
+            send_admin_order_mail(order)
+            print(f"✅ [Order #{order.order_number}] Admin email sent successfully", flush=True)
+            logger.info(f"✅ [Order #{order.order_number}] Admin email sent successfully")
+        except Exception as e:
+            print(f"❌ [Order #{order.order_number}] Admin email failed: {e}", flush=True)
+            logger.exception(f"❌ [Order #{order.order_number}] Admin email failed: {e}")
 
         return Response(
             {
