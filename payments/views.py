@@ -226,35 +226,27 @@ class VerifyRazorpayPaymentAPIView(APIView):
         ).delete()
 
         try:
-            logger.info(
-                f"📧 Sending customer email for Order #{order.id} "
-                f"to {order.user.email}"
-            )
-
+            print(f"📧 Sending customer email to {order.user.email}")
+            logger.info(f"📧 Sending customer email to {order.user.email}")
             send_order_email(
                 order.user.email,
                 order
             )
-
-            logger.info(
-                f"✅ Customer email sent successfully for Order #{order.id}"
-            )
-
-            logger.info(
-                f"📧 Sending admin email for Order #{order.id} "
-                f"to {settings.ADMIN_EMAIL}"
-            )
-
-            send_admin_order_mail(order)
-
-            logger.info(
-                f"✅ Admin email sent successfully for Order #{order.id}"
-            )
-
+            print("✅ Customer email sent successfully")
+            logger.info("✅ Customer email sent successfully")
         except Exception as e:
-            logger.exception(
-                f"❌ Email sending failed for Order #{order.id}: {e}"
-            )
+            print(f"❌ Customer email failed: {e}")
+            logger.exception(f"❌ Customer email failed: {e}")
+
+        try:
+            print(f"📧 Sending admin email to {settings.ADMIN_EMAIL}")
+            logger.info(f"📧 Sending admin email to {settings.ADMIN_EMAIL}")
+            send_admin_order_mail(order)
+            print("✅ Admin email sent successfully")
+            logger.info("✅ Admin email sent successfully")
+        except Exception as e:
+            print(f"❌ Admin email failed: {e}")
+            logger.exception(f"❌ Admin email failed: {e}")
 
         return Response(
             {
