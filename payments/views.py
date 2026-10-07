@@ -111,6 +111,16 @@ class VerifyRazorpayPaymentAPIView(APIView):
         order_token = request.data.get(
             "order_token"
         )
+        razorpay_order_id = request.data.get("razorpay_order_id")
+        razorpay_payment_id = request.data.get("razorpay_payment_id")
+
+        print(
+            f"[PAYMENT_VERIFY] Incoming verification: token={order_token}, rzp_order={razorpay_order_id}, rzp_payment={razorpay_payment_id}, user={request.user}",
+            flush=True
+        )
+        logger.info(
+            f"[PAYMENT_VERIFY] Incoming verification: token={order_token}, rzp_order={razorpay_order_id}, rzp_payment={razorpay_payment_id}, user={request.user}"
+        )
 
         try:
 
@@ -122,7 +132,8 @@ class VerifyRazorpayPaymentAPIView(APIView):
             )
 
         except Order.DoesNotExist:
-
+            print(f"[PAYMENT_VERIFY_ERROR] Order not found for token={order_token} and user={request.user}", flush=True)
+            logger.error(f"[PAYMENT_VERIFY_ERROR] Order not found for token={order_token} and user={request.user}")
             return Response(
                 {"error": "Order not found"},
                 status=404
@@ -154,6 +165,8 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 status="PENDING"
             ).last()
             if not payment:
+                print(f"[PAYMENT_VERIFY_ERROR] No PENDING Payment record found for Order #{order.order_number}", flush=True)
+                logger.error(f"[PAYMENT_VERIFY_ERROR] No PENDING Payment record found for Order #{order.order_number}")
                 return Response(
                     {"error": "Payment record not found"},
                     status=400
@@ -162,6 +175,8 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 payment.razorpay_order_id
                 != request.data.get("razorpay_order_id")
             ):
+                print(f"[PAYMENT_VERIFY_ERROR] Mismatched razorpay_order_id: expected {payment.razorpay_order_id}, got {request.data.get('razorpay_order_id')}", flush=True)
+                logger.error(f"[PAYMENT_VERIFY_ERROR] Mismatched razorpay_order_id: expected {payment.razorpay_order_id}, got {request.data.get('razorpay_order_id')}")
                 return Response(
                     {"error": "Invalid payment reference"},
                     status=400
@@ -172,8 +187,12 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 )
             payment.status = "SUCCESS"
             payment.save()
+            print(f"[PAYMENT_VERIFY_SUCCESS] Payment signature verified and record updated to SUCCESS for Order #{order.order_number}", flush=True)
+            logger.info(f"[PAYMENT_VERIFY_SUCCESS] Payment signature verified and record updated to SUCCESS for Order #{order.order_number}")
 
-        except Exception:
+        except Exception as e:
+            print(f"[PAYMENT_VERIFY_ERROR] Signature verification exception for Order #{order.order_number}: {e}", flush=True)
+            logger.exception(f"[PAYMENT_VERIFY_ERROR] Signature verification exception for Order #{order.order_number}: {e}")
 
             payment = Payment.objects.filter(
                 order=order,
@@ -196,7 +215,8 @@ class VerifyRazorpayPaymentAPIView(APIView):
             )
 
         if order.payment_status == "PAID":
-
+            print(f"[PAYMENT_VERIFY_NOTICE] Order #{order.order_number} was already marked as PAID", flush=True)
+            logger.info(f"[PAYMENT_VERIFY_NOTICE] Order #{order.order_number} was already marked as PAID")
             return Response(
                 {"message": "Already paid"}
             )
