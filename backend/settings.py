@@ -228,12 +228,18 @@ EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
 EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
+EMAIL_TIMEOUT = 15
 
-EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
-EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+_raw_email_user = os.getenv("EMAIL_HOST_USER", "")
+EMAIL_HOST_USER = _raw_email_user.strip().strip("'\"") if _raw_email_user else None
+
+_raw_email_password = os.getenv("EMAIL_HOST_PASSWORD", "")
+EMAIL_HOST_PASSWORD = _raw_email_password.strip().strip("'\"").replace(" ", "") if _raw_email_password else None
 
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL")
+
+_raw_admin_email = os.getenv("ADMIN_EMAIL", "")
+ADMIN_EMAIL = _raw_admin_email.strip().strip("'\"") if _raw_admin_email else None
 
 # -------------------------------------------------
 # 💳 PAYMENT CONFIGURATION
