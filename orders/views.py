@@ -24,6 +24,11 @@ from .models import (
 )
 from .utils import send_order_email
 from .utils import send_cancel_email
+from payments.emails import send_admin_order_mail
+from django.conf import settings
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 
@@ -175,7 +180,6 @@ class MarkOrderPaidAPIView(APIView):
         order.payment_status = "PAID"
         order.order_status = "CONFIRMED"
         order.save()
-        send_order_email(order.user.email, order)
 
         OrderStatusHistory.objects.create(order=order, status="CONFIRMED")
 
@@ -186,6 +190,27 @@ class MarkOrderPaidAPIView(APIView):
 
         # Clear user cart
         CartItem.objects.filter(cart__user=order.user).delete()
+
+        # Send confirmation emails
+        customer_email = order.user.email if order.user else None
+        admin_email = getattr(settings, "ADMIN_EMAIL", None)
+
+        try:
+            if customer_email:
+                send_order_email(customer_email, order)
+                print(f"[SUCCESS] [Order #{order.order_number}] Customer email sent", flush=True)
+                logger.info(f"[SUCCESS] [Order #{order.order_number}] Customer email sent to {customer_email}")
+        except Exception as e:
+            print(f"[FAILED] [Order #{order.order_number}] Customer email failed: {e}", flush=True)
+            logger.exception(f"[FAILED] [Order #{order.order_number}] Customer email failed: {e}")
+
+        try:
+            send_admin_order_mail(order)
+            print(f"[SUCCESS] [Order #{order.order_number}] Admin email sent", flush=True)
+            logger.info(f"[SUCCESS] [Order #{order.order_number}] Admin email sent to {admin_email}")
+        except Exception as e:
+            print(f"[FAILED] [Order #{order.order_number}] Admin email failed: {e}", flush=True)
+            logger.exception(f"[FAILED] [Order #{order.order_number}] Admin email failed: {e}")
 
         return Response({"message": "Order marked as PAID"})
 

@@ -60,26 +60,26 @@ class Command(BaseCommand):
             return
 
         self.stdout.write(f"Using Order: #{order.order_number} (ID: {order.id})")
-        self.stdout.write(f"Order Total: ₹{order.total_amount}")
+        self.stdout.write(f"Order Total: Rs. {order.total_amount}")
         self.stdout.write(f"Items Count: {order.items.count()}\n")
 
         # 1. Customer Email
-        self.stdout.write(f"📧 [1/2] Sending customer email to: {recipient}...")
+        self.stdout.write(f"[1/2] Sending customer email to: {recipient}...")
         try:
             send_order_email(recipient, order)
-            self.stdout.write(self.style.SUCCESS(f"✅ Customer email sent successfully to {recipient}"))
+            self.stdout.write(self.style.SUCCESS(f"[SUCCESS] Customer email sent successfully to {recipient}"))
         except Exception as e:
-            self.stderr.write(self.style.ERROR(f"❌ Customer email failed: {e}"))
+            self.stderr.write(self.style.ERROR(f"[FAILED] Customer email failed: {e}"))
             traceback.print_exc()
 
         # 2. Admin Email
         admin_email = getattr(settings, "ADMIN_EMAIL", None)
-        self.stdout.write(f"\n📧 [2/2] Sending admin email to: {admin_email}...")
+        self.stdout.write(f"\n[2/2] Sending admin email to: {admin_email}...")
         try:
             send_admin_order_mail(order)
-            self.stdout.write(self.style.SUCCESS(f"✅ Admin email sent successfully to {admin_email}"))
+            self.stdout.write(self.style.SUCCESS(f"[SUCCESS] Admin email sent successfully to {admin_email}"))
         except Exception as e:
-            self.stderr.write(self.style.ERROR(f"❌ Admin email failed: {e}"))
+            self.stderr.write(self.style.ERROR(f"[FAILED] Admin email failed: {e}"))
             traceback.print_exc()
 
         self.stdout.write("\n=== Done ===")
