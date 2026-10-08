@@ -16,9 +16,6 @@ from orders.models import (
     Order,
     OrderStatusHistory
 )
-import logging
-
-logger = logging.getLogger(__name__)
 from orders.utils import send_order_email
 class InitiatePaymentAPIView(APIView):
 
@@ -114,14 +111,6 @@ class VerifyRazorpayPaymentAPIView(APIView):
         razorpay_order_id = request.data.get("razorpay_order_id")
         razorpay_payment_id = request.data.get("razorpay_payment_id")
 
-        print(
-            f"[PAYMENT_VERIFY] Incoming verification: token={order_token}, rzp_order={razorpay_order_id}, rzp_payment={razorpay_payment_id}, user={request.user}",
-            flush=True
-        )
-        logger.info(
-            f"[PAYMENT_VERIFY] Incoming verification: token={order_token}, rzp_order={razorpay_order_id}, rzp_payment={razorpay_payment_id}, user={request.user}"
-        )
-
         try:
 
             order = Order.objects.select_related(
@@ -132,8 +121,6 @@ class VerifyRazorpayPaymentAPIView(APIView):
             )
 
         except Order.DoesNotExist:
-            print(f"[PAYMENT_VERIFY_ERROR] Order not found for token={order_token} and user={request.user}", flush=True)
-            logger.error(f"[PAYMENT_VERIFY_ERROR] Order not found for token={order_token} and user={request.user}")
             return Response(
                 {"error": "Order not found"},
                 status=404
@@ -165,8 +152,6 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 status="PENDING"
             ).last()
             if not payment:
-                print(f"[PAYMENT_VERIFY_ERROR] No PENDING Payment record found for Order #{order.order_number}", flush=True)
-                logger.error(f"[PAYMENT_VERIFY_ERROR] No PENDING Payment record found for Order #{order.order_number}")
                 return Response(
                     {"error": "Payment record not found"},
                     status=400
@@ -175,8 +160,6 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 payment.razorpay_order_id
                 != request.data.get("razorpay_order_id")
             ):
-                print(f"[PAYMENT_VERIFY_ERROR] Mismatched razorpay_order_id: expected {payment.razorpay_order_id}, got {request.data.get('razorpay_order_id')}", flush=True)
-                logger.error(f"[PAYMENT_VERIFY_ERROR] Mismatched razorpay_order_id: expected {payment.razorpay_order_id}, got {request.data.get('razorpay_order_id')}")
                 return Response(
                     {"error": "Invalid payment reference"},
                     status=400
@@ -187,12 +170,8 @@ class VerifyRazorpayPaymentAPIView(APIView):
                 )
             payment.status = "SUCCESS"
             payment.save()
-            print(f"[PAYMENT_VERIFY_SUCCESS] Payment signature verified and record updated to SUCCESS for Order #{order.order_number}", flush=True)
-            logger.info(f"[PAYMENT_VERIFY_SUCCESS] Payment signature verified and record updated to SUCCESS for Order #{order.order_number}")
 
-        except Exception as e:
-            print(f"[PAYMENT_VERIFY_ERROR] Signature verification exception for Order #{order.order_number}: {e}", flush=True)
-            logger.exception(f"[PAYMENT_VERIFY_ERROR] Signature verification exception for Order #{order.order_number}: {e}")
+        except Exception:
 
             payment = Payment.objects.filter(
                 order=order,
@@ -215,8 +194,6 @@ class VerifyRazorpayPaymentAPIView(APIView):
             )
 
         if order.payment_status == "PAID":
-            print(f"[PAYMENT_VERIFY_NOTICE] Order #{order.order_number} was already marked as PAID", flush=True)
-            logger.info(f"[PAYMENT_VERIFY_NOTICE] Order #{order.order_number} was already marked as PAID")
             return Response(
                 {"message": "Already paid"}
             )
@@ -250,36 +227,19 @@ class VerifyRazorpayPaymentAPIView(APIView):
 
         # 1. Customer Email
         try:
-            print(f"📨 PAYMENT: Starting customer email for Order #{order.order_number}", flush=True)
-            logger.info(f"PAYMENT: Starting customer email for Order #{order.order_number}")
             if customer_email:
-                print(f"📧 [CUSTOMER EMAIL] Connecting to SMTP and sending to {customer_email}...", flush=True)
-                logger.info(f"[CUSTOMER EMAIL] Connecting to SMTP and sending to {customer_email}...")
                 send_order_email(
                     customer_email,
                     order
                 )
-                print(f"✅ [CUSTOMER EMAIL] Sent successfully to {customer_email}", flush=True)
-                logger.info(f"[CUSTOMER EMAIL] Sent successfully to {customer_email}")
-            else:
-                print(f"⚠️ [CUSTOMER EMAIL] Skipped: No email address for user {order.user}", flush=True)
-                logger.warning(f"[CUSTOMER EMAIL] Skipped: No email address for user {order.user}")
-        except Exception as e:
-            print(f"❌ [CUSTOMER EMAIL] Failed for Order #{order.order_number}: {e}", flush=True)
-            logger.exception(f"[CUSTOMER EMAIL] Failed for Order #{order.order_number}: {e}")
+        except Exception:
+            pass
 
         # 2. Admin Email
         try:
-            print(f"📨 PAYMENT: Starting admin email for Order #{order.order_number}", flush=True)
-            logger.info(f"PAYMENT: Starting admin email for Order #{order.order_number}")
-            print(f"📧 [ADMIN EMAIL] Connecting to SMTP and sending to {admin_email}...", flush=True)
-            logger.info(f"[ADMIN EMAIL] Connecting to SMTP and sending to {admin_email}...")
             send_admin_order_mail(order)
-            print(f"✅ [ADMIN EMAIL] Sent successfully to {admin_email}", flush=True)
-            logger.info(f"[ADMIN EMAIL] Sent successfully to {admin_email}")
-        except Exception as e:
-            print(f"❌ [ADMIN EMAIL] Failed for Order #{order.order_number}: {e}", flush=True)
-            logger.exception(f"[ADMIN EMAIL] Failed for Order #{order.order_number}: {e}")
+        except Exception:
+            pass
 
         return Response(
             {
